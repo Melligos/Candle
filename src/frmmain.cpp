@@ -30,6 +30,8 @@
 #include <QAction>
 #include <QLayout>
 #include <QMimeData>
+#include <QStandardPaths>
+
 #include "frmmain.h"
 #include "ui_frmmain.h"
 
@@ -43,7 +45,11 @@ frmMain::frmMain(QWidget *parent) :
     m_statusForeColors << "white" << "palette(text)" << "white" << "black" << "black" << "black" << "black" << "palette(text)" << "white";
 
     // Loading settings
+#ifdef UNIX
+    m_settingsFileName = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+ "/candle/" + "/settings.ini";
+#else
     m_settingsFileName = qApp->applicationDirPath() + "/settings.ini";
+#endif
     preloadSettings();
 
     m_settings = new frmSettings(this);
@@ -231,10 +237,10 @@ void frmMain::preloadSettings()
 
     qApp->setStyleSheet(QString(qApp->styleSheet()).replace(QRegExp("font-size:\\s*\\d+"), "font-size: " + set.value("fontSize", "8").toString()));
 
-    // Update v-sync in glformat
-    QGLFormat fmt = QGLFormat::defaultFormat();
-    fmt.setSwapInterval(set.value("vsync", false).toBool() ? 1 : 0);
-    QGLFormat::setDefaultFormat(fmt);
+    // Update v-sync in glformat -- Not needed with QOpenGLWidget
+    //QGLFormat fmt = QGLFormat::defaultFormat();
+    //fmt.setSwapInterval(set.value("vsync", false).toBool() ? 1 : 0);
+    //QGLFormat::setDefaultFormat(fmt);
 }
 
 void frmMain::loadSettings()
@@ -1478,7 +1484,12 @@ void frmMain::on_cmdFileOpen_clicked()
         if (!saveChanges(false)) return;
 
         QString fileName  = QFileDialog::getOpenFileName(this, tr("Open"), m_lastFolder,
-                                   tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt);;All files (*.*)"));
+                                                        tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt);;All files (*.*)")
+#ifndef UNIX
+                                    					);
+#else
+                                    					, 0, QFileDialog::DontUseNativeDialog);
+#endif
 
         if (!fileName.isEmpty()) m_lastFolder = fileName.left(fileName.lastIndexOf(QRegExp("[/\\\\]+")));
 
@@ -1491,8 +1502,12 @@ void frmMain::on_cmdFileOpen_clicked()
     } else {
         if (!saveChanges(true)) return;
 
-        QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), m_lastFolder, tr("Heightmap files (*.map)"));
-
+        QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), m_lastFolder, tr("Heightmap files (*.map)")
+#ifndef UNIX
+					);
+#else
+					, 0, QFileDialog::DontUseNativeDialog);
+#endif
         if (fileName != "") {
             addRecentHeightmap(fileName);
             updateRecentFilesMenu();
@@ -2544,7 +2559,12 @@ bool frmMain::saveProgramToFile(QString fileName, GCodeTableModel *model)
 
 void frmMain::on_actFileSaveTransformedAs_triggered()
 {
-    QString fileName = (QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt)")));
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt)")
+#ifndef UNIX
+					);
+#else
+					, 0, QFileDialog::DontUseNativeDialog);
+#endif
 
     if (!fileName.isEmpty()) {
         saveProgramToFile(fileName, &m_programHeightmapModel);
@@ -2554,7 +2574,12 @@ void frmMain::on_actFileSaveTransformedAs_triggered()
 void frmMain::on_actFileSaveAs_triggered()
 {
     if (!m_heightMapMode) {
-        QString fileName = (QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt)")));
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("G-Code files (*.nc *.ncc *.ngc *.tap *.txt)")
+#ifndef UNIX
+                                    					);
+#else
+					                                    , 0, QFileDialog::DontUseNativeDialog);
+#endif
 
         if (!fileName.isEmpty()) if (saveProgramToFile(fileName, &m_programModel)) {
             m_programFileName = fileName;
@@ -2566,7 +2591,12 @@ void frmMain::on_actFileSaveAs_triggered()
             updateControlsState();
         }
     } else {
-        QString fileName = (QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("Heightmap files (*.map)")));
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save file as"), m_lastFolder, tr("Heightmap files (*.map)")
+#ifndef UNIX
+					        );
+#else
+					        , 0, QFileDialog::DontUseNativeDialog);
+#endif
 
         if (!fileName.isEmpty()) if (saveHeightMap(fileName)) {
             ui->txtHeightMap->setText(fileName.mid(fileName.lastIndexOf("/") + 1));
@@ -3449,7 +3479,12 @@ void frmMain::on_cmdHeightMapLoad_clicked()
         return;
     }
 
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), m_lastFolder, tr("Heightmap files (*.map)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), m_lastFolder, tr("Heightmap files (*.map)")
+#ifndef UNIX
+                                					);
+#else
+                                					, 0, QFileDialog::DontUseNativeDialog);
+#endif
 
     if (fileName != "") {
         addRecentHeightmap(fileName);

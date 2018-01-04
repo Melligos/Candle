@@ -741,16 +741,29 @@ void frmMain::onSerialPortReadyRead()
             m_statusReceived = true;
 
             // Update machine coordinates
-            QRegExp mpx("MPos:([^,]*),([^,]*),([^,^>]*)");
+            QRegExp mpx("MPos:([^,]*),([^,]*),([^,^>^|]*)");
             if (mpx.indexIn(data) != -1) {
+                m_mx = mpx.cap(1).toDouble();
+                m_my = mpx.cap(2).toDouble();
+                m_mz = mpx.cap(3).toDouble();
+
                 ui->txtMPosX->setText(mpx.cap(1));
                 ui->txtMPosY->setText(mpx.cap(2));
                 ui->txtMPosZ->setText(mpx.cap(3));
+
+                double cx = m_mx - m_wx;
+                double cy = m_my - m_wy;
+                double cz = m_mz - m_wz;
+
+                ui->txtWPosX->setText(QString::number(cx, 'f', 3));
+                ui->txtWPosY->setText(QString::number(cy, 'f', 3));
+                ui->txtWPosZ->setText(QString::number(cz, 'f', 3));
             }
 
             // Status
-            QRegExp stx("<([^,^>]*)");
+            QRegExp stx("<([^,^>^|^:]*)");
             if (stx.indexIn(data) != -1) {
+                QString raw = stx.cap(1);
                 status = m_status.indexOf(stx.cap(1));
 
                 // Undetermined status
@@ -844,9 +857,9 @@ void frmMain::onSerialPortReadyRead()
                             z = sNan;
                             grblReset();
                         } else {
-                            x = ui->txtMPosX->text().toDouble();
-                            y = ui->txtMPosY->text().toDouble();
-                            z = ui->txtMPosZ->text().toDouble();
+                            x = m_mx;
+                            y = m_my;
+                            z = m_mz;
                         }
                         break;
                     }
@@ -854,19 +867,27 @@ void frmMain::onSerialPortReadyRead()
             }
 
             // Update work coordinates
-            QRegExp wpx("WPos:([^,]*),([^,]*),([^,^>]*)");
+            QRegExp wpx("WCO:([^,]*),([^,]*),([^,^>^|]*)");
             if (wpx.indexIn(data) != -1)
             {
-                ui->txtWPosX->setText(wpx.cap(1));
-                ui->txtWPosY->setText(wpx.cap(2));
-                ui->txtWPosZ->setText(wpx.cap(3));
+                m_wx = wpx.cap(1).toDouble();
+                m_wy = wpx.cap(2).toDouble();
+                m_wz = wpx.cap(3).toDouble();
+
+                double cx = m_mx - m_wx;
+                double cy = m_my - m_wy;
+                double cz = m_mz - m_wz;
+
+                ui->txtWPosX->setText(QString::number(cx, 'f', 3));
+                ui->txtWPosY->setText(QString::number(cy, 'f', 3));
+                ui->txtWPosZ->setText(QString::number(cz, 'f', 3));
                 QVector3D toolPosition;
 
                 // Update tool position
                 if (!(status == CHECK && m_fileProcessedCommandIndex < m_currentModel->rowCount() - 1)) {
-                    toolPosition = QVector3D(toMetric(ui->txtWPosX->text().toDouble()),
-                                             toMetric(ui->txtWPosY->text().toDouble()),
-                                             toMetric(ui->txtWPosZ->text().toDouble()));
+                    toolPosition = QVector3D(toMetric(m_wx),
+                                             toMetric(m_wy),
+                                             toMetric(m_wz));
                     m_toolDrawer.setToolPosition(m_codeDrawer->getIgnoreZ() ? QVector3D(toolPosition.x(), toolPosition.y(), 0) : toolPosition);
                 }
 
@@ -1566,7 +1587,7 @@ void frmMain::loadFile(QList<QString> data)
             stripped = GcodePreprocessorUtils::removeComment(command);
             args = GcodePreprocessorUtils::splitCommand(stripped);
 
-            PointSegment *ps = gp.addCommand(args);
+            //PointSegment *ps = gp.addCommand(args);
 
     //        if (ps && (qIsNaN(ps->point()->x()) || qIsNaN(ps->point()->y()) || qIsNaN(ps->point()->z())))
     //                   qDebug() << "nan point segment added:" << *ps->point();
@@ -1728,46 +1749,49 @@ void frmMain::onActSendFromLineTriggered()
         QVector<QList<int>> lineIndexes = parser->getLinesIndexes();
 
         int lineNumber = m_currentModel->data(m_currentModel->index(commandIndex, 4)).toInt();
-        LineSegment* firstSegment = list.at(lineIndexes.at(lineNumber).first());
-        LineSegment* lastSegment = list.at(lineIndexes.at(lineNumber).last());
-        LineSegment* feedSegment = lastSegment;
-        int segmentIndex = list.indexOf(feedSegment);
-        while (feedSegment->isFastTraverse() && segmentIndex > 0) feedSegment = list.at(--segmentIndex);
+        if (lineNumber >= 0)
+        {
+            LineSegment* firstSegment = list.at(lineIndexes.at(lineNumber).first());
+            LineSegment* lastSegment = list.at(lineIndexes.at(lineNumber).last());
+            LineSegment* feedSegment = lastSegment;
+            int segmentIndex = list.indexOf(feedSegment);
+            while (feedSegment->isFastTraverse() && segmentIndex > 0) feedSegment = list.at(--segmentIndex);
 
-        QStringList commands;
+            QStringList commands;
 
-        commands.append(QString("M3 S%1").arg(qMax<double>(lastSegment->getSpindleSpeed(), ui->txtSpindleSpeed->value())));
+            commands.append(QString("M3 S%1").arg(qMax<double>(lastSegment->getSpindleSpeed(), ui->txtSpindleSpeed->value())));
 
-        commands.append(QString("G21 G90 G0 X%1 Y%2")
-                        .arg(firstSegment->getStart().x())
-                        .arg(firstSegment->getStart().y()));
-        commands.append(QString("G1 Z%1 F%2")
-                        .arg(firstSegment->getStart().z())
-                        .arg(feedSegment->getSpeed()));
+            commands.append(QString("G21 G90 G0 X%1 Y%2")
+                            .arg(firstSegment->getStart().x())
+                            .arg(firstSegment->getStart().y()));
+            commands.append(QString("G1 Z%1 F%2")
+                            .arg(firstSegment->getStart().z())
+                            .arg(feedSegment->getSpeed()));
 
-        commands.append(QString("%1 %2 %3 F%4")
-                        .arg(lastSegment->isMetric() ? "G21" : "G20")
-                        .arg(lastSegment->isAbsolute() ? "G90" : "G91")
-                        .arg(lastSegment->isFastTraverse() ? "G0" : "G1")
-                        .arg(lastSegment->isMetric() ? feedSegment->getSpeed() : feedSegment->getSpeed() / 25.4));
+            commands.append(QString("%1 %2 %3 F%4")
+                            .arg(lastSegment->isMetric() ? "G21" : "G20")
+                            .arg(lastSegment->isAbsolute() ? "G90" : "G91")
+                            .arg(lastSegment->isFastTraverse() ? "G0" : "G1")
+                            .arg(lastSegment->isMetric() ? feedSegment->getSpeed() : feedSegment->getSpeed() / 25.4));
 
-        if (lastSegment->isArc()) {
-            commands.append(lastSegment->plane() == PointSegment::XY ? "G17"
-            : lastSegment->plane() == PointSegment::ZX ? "G18" : "G19");
-        }
+            if (lastSegment->isArc()) {
+                commands.append(lastSegment->plane() == PointSegment::XY ? "G17"
+                : lastSegment->plane() == PointSegment::ZX ? "G18" : "G19");
+            }
 
-        QMessageBox box(this);
-        box.setIcon(QMessageBox::Information);
-        box.setText(tr("Following commands will be sent before selected line:\n") + commands.join('\n'));
-        box.setWindowTitle(qApp->applicationDisplayName());
-        box.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
-        box.addButton(tr("Skip"), QMessageBox::DestructiveRole);
+            QMessageBox box(this);
+            box.setIcon(QMessageBox::Information);
+            box.setText(tr("Following commands will be sent before selected line:\n") + commands.join('\n'));
+            box.setWindowTitle(qApp->applicationDisplayName());
+            box.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
+            box.addButton(tr("Skip"), QMessageBox::DestructiveRole);
 
-        int res = box.exec();
-        if (res == QMessageBox::Cancel) return;
-        else if (res == QMessageBox::Ok) {
-            foreach (QString command, commands) {
-                sendCommand(command, -1, m_settings->showUICommands());
+            int res = box.exec();
+            if (res == QMessageBox::Cancel) return;
+            else if (res == QMessageBox::Ok) {
+                foreach (QString command, commands) {
+                    sendCommand(command, -1, m_settings->showUICommands());
+                }
             }
         }
     }
@@ -1853,12 +1877,12 @@ void frmMain::storeOffsets()
 void frmMain::restoreOffsets()
 {
     // Still have pre-reset working position
-    sendCommand(QString("G21G53G90X%1Y%2Z%3").arg(toMetric(ui->txtMPosX->text().toDouble()))
-                                       .arg(toMetric(ui->txtMPosY->text().toDouble()))
-                                       .arg(toMetric(ui->txtMPosZ->text().toDouble())), -1, m_settings->showUICommands());
-    sendCommand(QString("G21G92X%1Y%2Z%3").arg(toMetric(ui->txtWPosX->text().toDouble()))
-                                       .arg(toMetric(ui->txtWPosY->text().toDouble()))
-                                       .arg(toMetric(ui->txtWPosZ->text().toDouble())), -1, m_settings->showUICommands());
+    sendCommand(QString("G21G53G90X%1Y%2Z%3").arg(toMetric(m_mx))
+                                       .arg(toMetric(m_my))
+                                       .arg(toMetric(m_mz)), -1, m_settings->showUICommands());
+    sendCommand(QString("G21G92X%1Y%2Z%3").arg(toMetric(m_wx))
+                                       .arg(toMetric(m_wy))
+                                       .arg(toMetric(m_wz)), -1, m_settings->showUICommands());
 }
 
 void frmMain::sendNextFileCommands() {
@@ -2244,12 +2268,12 @@ void frmMain::on_cmdRestoreOrigin_clicked()
 {
     // Restore offset
     sendCommand(QString("G21"), -1, m_settings->showUICommands());
-    sendCommand(QString("G53G90G0X%1Y%2Z%3").arg(toMetric(ui->txtMPosX->text().toDouble()))
-                                            .arg(toMetric(ui->txtMPosY->text().toDouble()))
-                                            .arg(toMetric(ui->txtMPosZ->text().toDouble())), -1, m_settings->showUICommands());
-    sendCommand(QString("G92X%1Y%2Z%3").arg(toMetric(ui->txtMPosX->text().toDouble()) - m_storedX)
-                                        .arg(toMetric(ui->txtMPosY->text().toDouble()) - m_storedY)
-                                        .arg(toMetric(ui->txtMPosZ->text().toDouble()) - m_storedZ), -1, m_settings->showUICommands());
+    sendCommand(QString("G53G90G0X%1Y%2Z%3").arg(toMetric(m_mx))
+                                            .arg(toMetric(m_my))
+                                            .arg(toMetric(m_mz)), -1, m_settings->showUICommands());
+    sendCommand(QString("G92X%1Y%2Z%3").arg(toMetric(m_mx) - m_storedX)
+                                        .arg(toMetric(m_my) - m_storedY)
+                                        .arg(toMetric(m_mz) - m_storedZ), -1, m_settings->showUICommands());
 
     // Move tool
     if (m_settings->moveOnRestore()) switch (m_settings->restoreMode()) {
@@ -2317,7 +2341,7 @@ void frmMain::on_sliSpindleSpeed_valueChanged(int value)
         ui->grpSpindle->setTitle(tr("Spindle") + QString(tr(" (%1)")).arg(ui->txtSpindleSpeed->text()));
 }
 
-void frmMain::on_sliSpindleSpeed_actionTriggered(int action)
+void frmMain::on_sliSpindleSpeed_actionTriggered(int)
 {
     ui->txtSpindleSpeed->setValue(ui->sliSpindleSpeed->sliderPosition() * 100);
     m_updateSpindleSpeed = true;
@@ -3784,10 +3808,10 @@ void frmMain::on_cmdHeightMapBorderAuto_clicked()
 
 bool frmMain::compareCoordinates(double x, double y, double z)
 {
-    return ui->txtMPosX->text().toDouble() == x && ui->txtMPosY->text().toDouble() == y && ui->txtMPosZ->text().toDouble() == z;
+    return m_mx == x && m_my == y && m_mz == z;
 }
 
-void frmMain::onCmdUserClicked(bool checked)
+void frmMain::onCmdUserClicked(bool)
 {
     int i = sender()->objectName().right(1).toInt();
 

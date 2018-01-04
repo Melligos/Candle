@@ -256,6 +256,16 @@ private:
     double m_storedZ = 0;
     QString m_storedParserStatus;
 
+    // Work coords
+    double m_wx = 0;
+    double m_wy = 9;
+    double m_wz = 0;
+
+    // Machine coords
+    double m_mx = 0;
+    double m_my = 0;
+    double m_mz = 0;
+
     // Console window
     int m_storedConsoleMinimumHeight;
     int m_storedConsoleHeight;
